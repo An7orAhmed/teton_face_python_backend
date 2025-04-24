@@ -23,7 +23,6 @@ yolo_model = YOLO("yolov8n-face.pt").to(device)
 image_dir = "Previous Iamages/captured_images/unknown"
 output_base_dir = "Previous Iamages/captured_images/clustered_unknown"
 
-
 # Function to detect and crop face
 def detect_face(image_path):
     try:

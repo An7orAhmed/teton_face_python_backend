@@ -1,3 +1,4 @@
+import datetime
 from flask import (
     Flask,
     request,
@@ -15,6 +16,7 @@ import os
 
 DATA_CSV = "data.csv"
 ATTENDANCE_DIR = "Attendance"
+UNKNOWN_FACES_DIR = "unknown_faces"
 PROFILE_PHOTO_DIR = "profile_photo"
 TRAIN_DIR = "captured_images"
 
@@ -25,8 +27,10 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 capture_running = False
 recognition_running = False
 
+
 def print_web(msg):
     socketio.emit("status_update", {"message": msg})
+
 
 # send images to frontend
 @app.route("/file/<base_folder>/<path:file_path>")
@@ -38,6 +42,7 @@ def serve_file(base_folder, file_path):
         return send_from_directory(directory, filename)
     except FileNotFoundError:
         os.abort(404, description="File not found")
+
 
 # Add face data
 @app.route("/add_face", methods=["POST"])
@@ -56,7 +61,7 @@ def add_face():
 
         if not all([unique_id, name, delay, frame, photo]):
             return jsonify({"error": "Missing required fields"}), 400
-        
+
         if os.path.exists(DATA_CSV):
             with open(DATA_CSV, "r") as f:
                 reader = csv.reader(f)
@@ -85,6 +90,7 @@ def add_face():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 # Train model
 @app.route("/start_training")
 def train_model():
@@ -95,6 +101,7 @@ def train_model():
         return jsonify({"error": "Recognition is running"}), 400
     Train.start(print_web)
     return jsonify({"status": "started"})
+
 
 # Start recognition
 @app.route("/start_recognition")
@@ -108,6 +115,7 @@ def start_recognition():
     Prediction.run(print_web)
     return jsonify({"status": "started"})
 
+
 # Stop recognition
 @app.route("/stop_recognition")
 def stop_recognition():
@@ -119,6 +127,7 @@ def stop_recognition():
     recognition_running = False
     Prediction.close(print_web)
     return jsonify({"status": "stopped"})
+
 
 # get all faces
 @app.route("/faces")
@@ -137,6 +146,7 @@ def get_faces():
         return jsonify({"error": "data.csv not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 # get statistic
 @app.route("/stats")
@@ -164,7 +174,7 @@ def get_stats():
 
 
 # get recognized record
-@app.route("/recognized")
+@app.route("/recognized_faces")
 def get_recognized():
     date = request.args.get("date")
     if not date:
@@ -172,7 +182,7 @@ def get_recognized():
 
     file_path = os.path.join(ATTENDANCE_DIR, f"{date}.csv")
     if not os.path.exists(file_path):
-        return jsonify({'error': 'no data found'}) 
+        return jsonify([])
 
     recognized = []
     with open(file_path, "r") as csvfile:
@@ -181,15 +191,49 @@ def get_recognized():
             name = row["Name"]
             id_ = row["ID"]
             photo = f"/{PROFILE_PHOTO_DIR}/{id_}_{name}.jpg"
-            recognized.append({
-                "name": name,
-                "id": id_,
-                "inTime": row["InTime"],
-                "outTime": row["OutTime"],
-                "photo": photo
-            })
+            recognized.append(
+                {
+                    "name": name,
+                    "id": id_,
+                    "inTime": row["InTime"],
+                    "outTime": row["OutTime"],
+                    "photo": photo,
+                }
+            )
 
     return jsonify(recognized)
+
+
+# get unrecognized record
+@app.route("/unrecognized_faces")
+def get_unrecognized():
+    date = request.args.get("date")
+    if not date:
+        return jsonify({"error": "Missing date parameter"}), 400
+
+    file_path = os.path.join(UNKNOWN_FACES_DIR, f"{date}")
+    if not os.path.exists(file_path):
+        return jsonify([])
+
+    unrecognized = []
+    for file in os.listdir(file_path):
+        if file.endswith(".jpg"):
+            timestamp = file.split("_")[1].split(".")[0]
+            detect_time = datetime.datetime.fromtimestamp(int(timestamp)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            photo = f"/{UNKNOWN_FACES_DIR}/{date}/{file}"
+            unrecognized.append(
+                {
+                    "name": "Unknown",
+                    "photo": photo,
+                    "unknownId": timestamp,
+                    "detectTime": detect_time,
+                }
+            )
+
+    return jsonify(unrecognized)
+
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)

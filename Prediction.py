@@ -16,7 +16,9 @@ import time
 from collections import defaultdict
 from imutils.video import VideoStream
 
-latest_frame = None
+USE_BUILD_IN_CAMERA = True
+DISPLAY_ENABLED = False
+
 running_flag = False
 thread = None
 
@@ -98,10 +100,10 @@ def web_push_notification(print_web, Id, name, frame, force_push=False):
         print(f"Notification for ID: {Id} delayed by {debounce_delay} seconds.")
 
 def start(print_web):
-    global latest_frame, running_flag
+    global running_flag
 
     # Attendance tracking
-    col_names = ['Name', 'ID', 'In Time', 'Out Time']
+    col_names = ['Name', 'ID', 'InTime', 'OutTime']
     attendance_list = []
     attended_ids = set()
     attendance_queue = queue.Queue()
@@ -150,12 +152,14 @@ def start(print_web):
 
     # Initialize RTSP video stream
     rtsp_url = 'rtsp://admin:123admin@192.168.1.20:554/cam/realmonitor?channel=1&subtype=0'
-    cap = VideoStream(rtsp_url).start()
+    if USE_BUILD_IN_CAMERA:
+        cap = VideoStream(0).start()
+    else:
+        cap = VideoStream(rtsp_url).start()
     time.sleep(2.0)
     print("RTSP stream initialized.")
 
-    display_enabled = False
-    if display_enabled:
+    if DISPLAY_ENABLED:
         cv2.namedWindow('Face Recognition', cv2.WINDOW_NORMAL)
         cv2.resizeWindow('Face Recognition', 800, 600)
 
@@ -205,7 +209,7 @@ def start(print_web):
             continue
 
         processing_frame = cv2.resize(frame, (720, 480))
-        display_frame = processing_frame.copy() if display_enabled else None
+        display_frame = processing_frame.copy() if DISPLAY_ENABLED else None
 
         results = yolo_model(processing_frame, imgsz=160, conf=yolo_conf, verbose=False)
         print(f"YOLO detection completed, boxes found: {len(results[0].boxes)}")
@@ -258,7 +262,7 @@ def start(print_web):
 
                 print(f"Max Similarity: {max_similarity:.4f}, Predicted ID: {print_name}")
 
-                if display_enabled:
+                if DISPLAY_ENABLED:
                     cv2.rectangle(display_frame, (x1, y1), (x2, y2), color, 1)
                     if display_name:
                         cv2.putText(display_frame, f"{display_name}", (x1, y1-10),
@@ -300,7 +304,7 @@ def start(print_web):
         jpg_as_text = base64.b64encode(buffer).decode("utf-8")
         print_web(json.dumps({"cam_frame": jpg_as_text}))
 
-        if display_enabled:
+        if DISPLAY_ENABLED:
             cv2.imshow('Face Recognition', display_frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -314,7 +318,7 @@ def start(print_web):
     attendance_queue.put(None)
     attendance_saver.join()
     cap.stop()
-    if display_enabled:
+    if DISPLAY_ENABLED:
         cv2.destroyAllWindows()
 
 def run(print_web):
