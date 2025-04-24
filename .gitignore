@@ -1,0 +1,10 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+augmented_images/
+captured_images/
+facenet_pytorch/
+lib/
+profile_photo/
+known_faces/
+unknown_faces/
+__pycache__/
+include/
